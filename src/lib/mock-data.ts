@@ -4,6 +4,7 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   id: 1,
   announcement_text: "✨ Complimentary shipping for orders above Rp 500.000 | Discover the New Spring/Summer Collection",
   announcement_enabled: true,
+  hero_eyebrow: "EDITORIAL EDITION",
   hero_title: "Timeless Elegance, Effortlessly Worn.",
   hero_subtitle: "Thoughtfully designed silhouettes and curated luxury fabrics for the modern, graceful woman.",
   hero_image_url: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=2070&auto=format&fit=crop",

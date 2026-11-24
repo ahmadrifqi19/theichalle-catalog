@@ -2,6 +2,7 @@ export interface SizeGuide {
   bust?: string; // LD (Lingkar Dada)
   length?: string; // PB (Panjang Baju)
   fabric?: string;
+  variants?: Record<string, { bust: string; length: string }>;
 }
 
 export type ProductStatus = 'Ready Stock' | 'Pre-Order' | 'Sold Out' | 'sold_out' | 'New Arrival' | 'new';
@@ -18,6 +19,7 @@ export interface Product {
   discount_price?: number | null;
   images: string[];
   shades: string[];
+  sold_out_shades?: string[];
   sizes: string[];
   size_guide?: SizeGuide;
   status: ProductStatus;
@@ -32,6 +34,7 @@ export interface StoreSettings {
   updated_at?: string;
   announcement_text: string;
   announcement_enabled: boolean;
+  hero_eyebrow?: string;
   hero_title: string;
   hero_subtitle: string;
   hero_image_url: string;

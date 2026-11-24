@@ -20,6 +20,7 @@ export function buildWhatsAppOrderUrl(params: {
   productName: string;
   shade?: string;
   size?: string;
+  price: number;
 }): string {
   const cleanPhone = params.phone.replace(/[^0-9]/g, '');
   const formattedPhone = cleanPhone.startsWith('0')
@@ -28,10 +29,9 @@ export function buildWhatsAppOrderUrl(params: {
     ? cleanPhone
     : '62' + cleanPhone;
 
-  const shadeText = params.shade || 'Not Specified';
-  const sizeText = params.size || 'Standard';
-
-  const message = `Hello The Ichalle Admin, I would like to order:\n- Item: ${params.productName}\n- Shade: ${shadeText}\n- Size: ${sizeText}\nIs this item still available?`;
+  const shadeText = params.shade || '-';
+  const sizeText = params.size || '-';
+  const message = `Halo Admin The Ichalle, saya ingin memesan:\n• Produk: ${params.productName}\n• Warna: ${shadeText}\n• Ukuran: ${sizeText}\n• Harga: ${formatRupiah(params.price)}\n\nApakah stoknya masih tersedia?`;
 
   return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
 }

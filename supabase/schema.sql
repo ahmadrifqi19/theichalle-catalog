@@ -16,6 +16,7 @@ create table if not exists public.products (
     discount_price numeric,
     images text[] default '{}',
     shades text[] default '{}',
+    sold_out_shades text[] default '{}',
     sizes text[] default '{}',
     size_guide jsonb default '{"bust": "98-102 cm", "length": "120 cm", "fabric": "Premium Silk & Linen"}'::jsonb,
     status text not null default 'Ready Stock',
@@ -26,6 +27,7 @@ create table if not exists public.products (
 
 -- Migration support for products:
 alter table public.products add column if not exists custom_badge text default null;
+alter table public.products add column if not exists sold_out_shades text[] default '{}';
 
 -- Index for faster queries
 create index if not exists idx_products_category on public.products(category);
@@ -39,6 +41,7 @@ create table if not exists public.store_settings (
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
     announcement_text text default '✨ Complimentary shipping for orders above Rp 500.000 | Discover the New Spring/Summer Collection',
     announcement_enabled boolean default true,
+    hero_eyebrow text default 'EDITORIAL EDITION',
     hero_title text default 'Timeless Elegance, Effortlessly Worn.',
     hero_subtitle text default 'Thoughtfully designed silhouettes and curated luxury fabrics for the modern, graceful woman.',
     hero_image_url text default 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=2070&auto=format&fit=crop',
@@ -60,6 +63,7 @@ create table if not exists public.store_settings (
 );
 
 -- Migration support if table already exists:
+alter table public.store_settings add column if not exists hero_eyebrow text default 'EDITORIAL EDITION';
 alter table public.store_settings add column if not exists promo_popup_active boolean default false;
 alter table public.store_settings add column if not exists promo_popup_image_url text default null;
 alter table public.store_settings add column if not exists promo_popup_link text default null;

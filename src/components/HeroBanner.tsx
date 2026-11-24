@@ -4,6 +4,7 @@ import React from 'react';
 import { ArrowDown } from 'lucide-react';
 
 interface HeroBannerProps {
+  eyebrow?: string;
   title?: string;
   subtitle?: string;
   imageUrl?: string;
@@ -11,6 +12,7 @@ interface HeroBannerProps {
 }
 
 export default function HeroBanner({
+  eyebrow,
   title = "Timeless Elegance, Effortlessly Worn.",
   subtitle = "Thoughtfully designed silhouettes and curated luxury fabrics for the modern, graceful woman.",
   imageUrl = "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=2070&auto=format&fit=crop",
@@ -45,9 +47,11 @@ export default function HeroBanner({
 
       {/* Hero Content - Perfectly Fitted Above the Fold on Mobile */}
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 text-center text-[#FAF6F0] flex flex-col items-center py-8 sm:py-12">
-        <span className="inline-block uppercase tracking-[0.25em] sm:tracking-[0.35em] text-[10px] sm:text-xs font-medium text-[#F3ECE1] mb-2 sm:mb-4 border-b border-[#F3ECE1]/40 pb-0.5">
-          Editorial Edition
-        </span>
+        {eyebrow?.trim() ? (
+          <span className="inline-block uppercase tracking-[0.25em] sm:tracking-[0.35em] text-[10px] sm:text-xs font-medium text-[#F3ECE1] mb-2 sm:mb-4 border-b border-[#F3ECE1]/40 pb-0.5">
+            {eyebrow}
+          </span>
+        ) : null}
 
         <h1 className="font-serif text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-normal leading-tight tracking-wide drop-shadow-sm max-w-2xl px-2">
           {title}

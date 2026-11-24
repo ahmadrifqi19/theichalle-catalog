@@ -98,6 +98,7 @@ export default function StorefrontPage() {
       {/* 3. Hero Banner Section */}
       <main className="flex-grow">
         <HeroBanner
+          eyebrow={settings.hero_eyebrow}
           title={settings.hero_title}
           subtitle={settings.hero_subtitle}
           imageUrl={settings.hero_image_url}

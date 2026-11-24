@@ -101,11 +101,21 @@ function ManageCategoriesPanel({
   );
 }
 
+const getErrorMessage = (err: unknown, fallback: string): string => {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return fallback;
+};
+
+const createTemporaryProductId = () => `prod-${Date.now()}`;
+
 export default function AdminDashboardPage() {
   const router = useRouter();
 
   // Authentication & session state
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [, setCurrentUserEmail] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState(false);
 
@@ -135,6 +145,7 @@ export default function AdminDashboardPage() {
     description: string;
     images: string[];
     shadesInput: string;
+    soldOutShades: string[];
     sizesInput: string;
     bust: string;
     length: string;
@@ -151,6 +162,7 @@ export default function AdminDashboardPage() {
     description: '',
     images: [],
     shadesInput: '',
+    soldOutShades: [],
     sizesInput: 'All Size',
     bust: '100 cm',
     length: '70 cm',
@@ -160,6 +172,19 @@ export default function AdminDashboardPage() {
     is_featured: false,
     marketplace_url: '',
   });
+  const [sizeVariants, setSizeVariants] = useState<Record<string, { bust: string; length: string }>>({});
+  const parsedSizes = productForm.sizesInput.split(',').map((s) => s.trim()).filter(Boolean);
+
+  const updateSizeVariant = (size: string, field: 'bust' | 'length', value: string) => {
+    setSizeVariants((previous) => ({
+      ...previous,
+      [size]: {
+        bust: previous[size]?.bust ?? productForm.bust,
+        length: previous[size]?.length ?? productForm.length,
+        [field]: value,
+      },
+    }));
+  };
 
   // Image Upload State
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -175,6 +200,37 @@ export default function AdminDashboardPage() {
     setTimeout(() => {
       setToastMessage(null);
     }, 4000);
+  };
+
+  const fetchDatabaseData = async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const supabase = createClient();
+
+      const { data: prodData, error: prodErr } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!prodErr && prodData) {
+        setProducts(prodData as Product[]);
+      }
+
+      const { data: setData, error: setErr } = await supabase
+        .from('store_settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (!setErr && setData) {
+        setSettings({
+          ...(setData as StoreSettings),
+          categories: Array.isArray(setData.categories) ? setData.categories : DEFAULT_CATEGORIES,
+        });
+      }
+    } catch (err) {
+      console.warn('Error fetching admin live data:', err);
+    }
   };
 
   // 1. Check Authentication on Mount
@@ -211,37 +267,6 @@ export default function AdminDashboardPage() {
     initAuth();
   }, [router]);
 
-  const fetchDatabaseData = async () => {
-    if (!isSupabaseConfigured()) return;
-    try {
-      const supabase = createClient();
-
-      const { data: prodData, error: prodErr } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!prodErr && prodData) {
-        setProducts(prodData as Product[]);
-      }
-
-      const { data: setData, error: setErr } = await supabase
-        .from('store_settings')
-        .select('*')
-        .eq('id', 1)
-        .single();
-
-      if (!setErr && setData) {
-        setSettings({
-          ...(setData as StoreSettings),
-          categories: Array.isArray(setData.categories) ? setData.categories : DEFAULT_CATEGORIES,
-        });
-      }
-    } catch (err) {
-      console.warn('Error fetching admin live data:', err);
-    }
-  };
-
   // 2. Logout handler
   const handleLogout = async () => {
     localStorage.removeItem('theichalle_admin_preview');
@@ -268,8 +293,8 @@ export default function AdminDashboardPage() {
 
         if (error) throw error;
         showToast(`Status updated to "${newStatus}"`);
-      } catch (err: any) {
-        showToast(err.message || 'Failed to update status', 'error');
+      } catch (err: unknown) {
+        showToast(getErrorMessage(err, 'Failed to update status'), 'error');
       }
     } else {
       showToast(`Status updated to "${newStatus}" (Local preview)`);
@@ -293,8 +318,8 @@ export default function AdminDashboardPage() {
 
         if (error) throw error;
         showToast(nextVal ? 'Marked as Featured' : 'Unmarked from Featured');
-      } catch (err: any) {
-        showToast(err.message || 'Failed to toggle featured', 'error');
+      } catch (err: unknown) {
+        showToast(getErrorMessage(err, 'Failed to toggle featured'), 'error');
       }
     } else {
       showToast(nextVal ? 'Marked as Featured (Preview)' : 'Unmarked (Preview)');
@@ -312,6 +337,7 @@ export default function AdminDashboardPage() {
       description: '',
       images: [],
       shadesInput: 'Oatmeal, Burgundy',
+      soldOutShades: [],
       sizesInput: 'All Size',
       bust: '100 cm',
       length: '70 cm',
@@ -321,6 +347,7 @@ export default function AdminDashboardPage() {
       is_featured: false,
       marketplace_url: '',
     });
+    setSizeVariants({});
     setCompressionInfo(null);
     setCustomImageUrlInput('');
     setIsProductModalOpen(true);
@@ -336,6 +363,7 @@ export default function AdminDashboardPage() {
       description: product.description || '',
       images: product.images || [],
       shadesInput: product.shades?.join(', ') || '',
+      soldOutShades: product.sold_out_shades || [],
       sizesInput: product.sizes?.join(', ') || '',
       bust: product.size_guide?.bust || '',
       length: product.size_guide?.length || '',
@@ -345,6 +373,7 @@ export default function AdminDashboardPage() {
       is_featured: product.is_featured,
       marketplace_url: product.marketplace_url || '',
     });
+    setSizeVariants(product.size_guide?.variants || {});
     setCompressionInfo(null);
     setCustomImageUrlInput('');
     setIsProductModalOpen(true);
@@ -362,8 +391,8 @@ export default function AdminDashboardPage() {
         const { error } = await supabase.from('products').delete().eq('id', product.id);
         if (error) throw error;
         showToast(`Product "${product.name}" deleted.`);
-      } catch (err: any) {
-        showToast(err.message || 'Failed to delete product', 'error');
+      } catch (err: unknown) {
+        showToast(getErrorMessage(err, 'Failed to delete product'), 'error');
       }
     } else {
       showToast(`Product "${product.name}" removed.`);
@@ -425,9 +454,9 @@ export default function AdminDashboardPage() {
         }));
         showToast('Image compressed & added (Preview Mode)');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Image compression/upload error:', err);
-      showToast(err.message || 'Image upload failed', 'error');
+      showToast(getErrorMessage(err, 'Image upload failed'), 'error');
     } finally {
       setIsUploadingImage(false);
       e.target.value = '';
@@ -468,12 +497,19 @@ export default function AdminDashboardPage() {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const sizesArray = productForm.sizesInput
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const sizesArray = parsedSizes;
+    const variants = Object.fromEntries(
+      parsedSizes.map((size) => [
+        size,
+        {
+          bust: sizeVariants[size]?.bust ?? productForm.bust,
+          length: sizeVariants[size]?.length ?? productForm.length,
+        },
+      ])
+    );
+    const firstSizeVariant = parsedSizes.length > 1 ? variants[parsedSizes[0]] : undefined;
 
-    const productPayload: Partial<Product> = {
+    const productPayload: Omit<Product, 'id' | 'created_at'> = {
       name: productForm.name.trim(),
       slug: productForm.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
       category: productForm.category,
@@ -482,11 +518,13 @@ export default function AdminDashboardPage() {
       description: productForm.description,
       images: productForm.images.length > 0 ? productForm.images : ['https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800'],
       shades: shadesArray,
+      sold_out_shades: productForm.soldOutShades.filter((shade) => shadesArray.includes(shade)),
       sizes: sizesArray,
       size_guide: {
-        bust: productForm.bust,
-        length: productForm.length,
+        bust: firstSizeVariant?.bust ?? productForm.bust,
+        length: firstSizeVariant?.length ?? productForm.length,
         fabric: productForm.fabric,
+        variants,
       },
       status: productForm.status,
       is_featured: productForm.is_featured,
@@ -496,7 +534,7 @@ export default function AdminDashboardPage() {
 
     if (editingProductId) {
       setProducts((prev) =>
-        prev.map((p) => (p.id === editingProductId ? ({ ...p, ...productPayload } as Product) : p))
+        prev.map((p) => (p.id === editingProductId ? { ...p, ...productPayload } : p))
       );
 
       if (isSupabaseConfigured() && !isDemoMode) {
@@ -509,16 +547,16 @@ export default function AdminDashboardPage() {
 
           if (error) throw error;
           showToast('Product updated successfully!');
-        } catch (err: any) {
-          showToast(err.message || 'Failed to update product', 'error');
+        } catch (err: unknown) {
+          showToast(getErrorMessage(err, 'Failed to update product'), 'error');
         }
       } else {
         showToast('Product updated (Preview mode)');
       }
     } else {
-      const newId = `prod-${Date.now()}`;
+      const newId = createTemporaryProductId();
       const newProduct: Product = {
-        ...(productPayload as any),
+        ...productPayload,
         id: newId,
         created_at: new Date().toISOString(),
       };
@@ -539,8 +577,8 @@ export default function AdminDashboardPage() {
             setProducts((prev) => prev.map((p) => (p.id === newId ? (data as Product) : p)));
           }
           showToast('New product added to catalog!');
-        } catch (err: any) {
-          showToast(err.message || 'Failed to insert product', 'error');
+        } catch (err: unknown) {
+          showToast(getErrorMessage(err, 'Failed to insert product'), 'error');
         }
       } else {
         showToast('New product added (Preview mode)');
@@ -568,8 +606,8 @@ export default function AdminDashboardPage() {
 
         if (error) throw error;
         showToast('Store settings saved successfully!');
-      } catch (err: any) {
-        showToast(err.message || 'Failed to save settings', 'error');
+      } catch (err: unknown) {
+        showToast(getErrorMessage(err, 'Failed to save settings'), 'error');
       } finally {
         setIsSavingSettings(false);
       }
@@ -598,8 +636,8 @@ export default function AdminDashboardPage() {
         ? 'Kategori diperbarui (Preview Mode)'
         : 'Kategori berhasil diperbarui');
       return true;
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Gagal menyimpan kategori', 'error');
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, 'Gagal menyimpan kategori'), 'error');
       return false;
     } finally {
       setIsSavingCategories(false);
@@ -655,8 +693,8 @@ export default function AdminDashboardPage() {
         const previewUrl = URL.createObjectURL(compressedFile);
         setSettings((prev) => ({ ...prev, hero_image_url: previewUrl }));
       }
-    } catch (err: any) {
-      showToast(err.message || 'Banner upload failed', 'error');
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, 'Banner upload failed'), 'error');
     } finally {
       e.target.value = '';
     }
@@ -694,8 +732,8 @@ export default function AdminDashboardPage() {
         const previewUrl = URL.createObjectURL(compressedFile);
         setSettings((prev) => ({ ...prev, promo_popup_image_url: previewUrl }));
       }
-    } catch (err: any) {
-      showToast(err.message || 'Promo poster upload failed', 'error');
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, 'Promo poster upload failed'), 'error');
     } finally {
       e.target.value = '';
     }
@@ -1339,15 +1377,28 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* 2. Hero Section Settings */}
+            {/* 3. Hero Section Settings */}
             <div className="bg-[#FAF6F0] p-4 sm:p-6 rounded-sm border border-[#EADFCF] shadow-xs space-y-3 sm:space-y-4">
               <div className="border-b border-[#EADFCF] pb-2.5">
                 <h3 className="font-serif text-base sm:text-lg font-normal text-[#2B2625]">
                   Hero Banner Section
                 </h3>
                 <p className="text-[10px] sm:text-[11px] text-[#2B2625]/60">
-                  Headline, subtitle, and primary editorial image
+                  Small eyebrow tag, headline, subtitle, and primary editorial image
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider font-semibold text-[#2B2625] mb-1">
+                  Hero Small Tag / Label (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={settings.hero_eyebrow ?? ''}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, hero_eyebrow: e.target.value }))}
+                  placeholder="e.g. EDITORIAL EDITION or NEW ARRIVAL (leave blank to hide)"
+                  className="w-full px-3 py-2 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs text-[#2B2625] focus:outline-none focus:border-[#5C1A26]"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -1419,7 +1470,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* 3. Contact & Social Channels */}
+            {/* 4. Contact & Social Channels */}
             <div className="bg-[#FAF6F0] p-4 sm:p-6 rounded-sm border border-[#EADFCF] shadow-xs space-y-3 sm:space-y-4">
               <div className="border-b border-[#EADFCF] pb-2.5">
                 <h3 className="font-serif text-base sm:text-lg font-normal text-[#2B2625]">
@@ -1515,7 +1566,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* 4. Policy & Editorial Texts */}
+            {/* 5. Policy & Editorial Texts */}
             <div className="bg-[#FAF6F0] p-4 sm:p-6 rounded-sm border border-[#EADFCF] shadow-xs space-y-3 sm:space-y-4">
               <div className="border-b border-[#EADFCF] pb-2.5">
                 <h3 className="font-serif text-base sm:text-lg font-normal text-[#2B2625]">
@@ -1733,7 +1784,7 @@ export default function AdminDashboardPage() {
                       Product Photos ({productForm.images.length}/4)
                     </span>
                     <p className="text-[10px] text-[#2B2625]/60">
-                      Auto-compressed. Photo #1 = front cover, #2 = hover view.
+                      Auto-compressed. Match photo order (#1, #2, etc.) with shades order below.
                     </p>
                   </div>
 
@@ -1866,6 +1917,40 @@ export default function AdminDashboardPage() {
                     placeholder="Oatmeal, Burgundy, Olive"
                     className="w-full px-3 py-2 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs text-[#2B2625] focus:outline-none focus:border-[#5C1A26]"
                   />
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {productForm.shadesInput
+                      .split(',')
+                      .map((shade) => shade.trim())
+                      .filter(Boolean)
+                      .map((shade, index) => {
+                        const isSoldOut = productForm.soldOutShades.includes(shade);
+                        return (
+                          <button
+                            key={`${shade}-${index}`}
+                            type="button"
+                            aria-pressed={isSoldOut}
+                            onClick={() =>
+                              setProductForm((prev) => ({
+                                ...prev,
+                                soldOutShades: isSoldOut
+                                  ? prev.soldOutShades.filter((item) => item !== shade)
+                                  : [...prev.soldOutShades, shade],
+                              }))
+                            }
+                            className={`rounded border px-2 py-1 text-[10px] transition-colors ${
+                              isSoldOut
+                                ? 'border-red-300 bg-red-50 text-red-700 line-through'
+                                : 'border-[#EADFCF] text-[#2B2625] hover:border-[#5C1A26]'
+                            }`}
+                          >
+                            {shade}{isSoldOut ? ' (Habis)' : ''}
+                          </button>
+                        );
+                      })}
+                  </div>
+                  <p className="text-[10px] text-[#5C1A26]/80 mt-1">
+                    Klik warna untuk menandai atau membatalkan status habis. Urutan foto (#1, #2, dst.) mengikuti urutan warna.
+                  </p>
                 </div>
 
                 <div>
@@ -1890,33 +1975,80 @@ export default function AdminDashboardPage() {
                   Garment Size Guide & Fabric
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-                  <div>
-                    <label className="block text-[10px] text-[#2B2625]/70 mb-0.5">
-                      Bust / LD
-                    </label>
-                    <input
-                      type="text"
-                      value={productForm.bust}
-                      onChange={(e) => setProductForm((prev) => ({ ...prev, bust: e.target.value }))}
-                      placeholder="98-104 cm"
-                      className="w-full px-2.5 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-[#2B2625]/70 mb-0.5">
-                      Length / PB
-                    </label>
-                    <input
-                      type="text"
-                      value={productForm.length}
-                      onChange={(e) =>
-                        setProductForm((prev) => ({ ...prev, length: e.target.value }))
-                      }
-                      placeholder="120 cm"
-                      className="w-full px-2.5 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs"
-                    />
-                  </div>
-                  <div>
+                  {parsedSizes.length > 1 ? (
+                    <div className="space-y-2 sm:col-span-3">
+                      {parsedSizes.map((size) => {
+                        const variant = sizeVariants[size] ?? {
+                          bust: productForm.bust,
+                          length: productForm.length,
+                        };
+
+                        return (
+                          <div key={size} className="rounded border border-[#EADFCF] p-2">
+                            <span className="mb-1.5 block text-[10px] font-semibold text-[#5C1A26]">
+                              Size: {size}
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-[10px] text-[#2B2625]/70 mb-0.5">
+                                  Bust / LD
+                                </label>
+                                <input
+                                  type="text"
+                                  value={variant.bust}
+                                  onChange={(e) => updateSizeVariant(size, 'bust', e.target.value)}
+                                  placeholder="98-104 cm"
+                                  className="w-full px-2.5 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-[#2B2625]/70 mb-0.5">
+                                  Length / PB
+                                </label>
+                                <input
+                                  type="text"
+                                  value={variant.length}
+                                  onChange={(e) => updateSizeVariant(size, 'length', e.target.value)}
+                                  placeholder="120 cm"
+                                  className="w-full px-2.5 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-[10px] text-[#2B2625]/70 mb-0.5">
+                          Bust / LD
+                        </label>
+                        <input
+                          type="text"
+                          value={productForm.bust}
+                          onChange={(e) => setProductForm((prev) => ({ ...prev, bust: e.target.value }))}
+                          placeholder="98-104 cm"
+                          className="w-full px-2.5 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-[#2B2625]/70 mb-0.5">
+                          Length / PB
+                        </label>
+                        <input
+                          type="text"
+                          value={productForm.length}
+                          onChange={(e) =>
+                            setProductForm((prev) => ({ ...prev, length: e.target.value }))
+                          }
+                          placeholder="120 cm"
+                          className="w-full px-2.5 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className={parsedSizes.length > 1 ? 'sm:col-span-3' : ''}>
                     <label className="block text-[10px] text-[#2B2625]/70 mb-0.5">
                       Fabric
                     </label>
