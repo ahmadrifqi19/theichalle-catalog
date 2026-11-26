@@ -1,11 +1,22 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./tailwind.css";
+
+export const viewport: Viewport = {
+  themeColor: "#5C1A26",
+};
 
 export const metadata: Metadata = {
   title: "The Ichalle Collection | Timeless Women Wear",
   description: "Curated modern, modest, and timeless women wear crafted with luxurious fabrics and effortless silhouettes.",
+  applicationName: "The Ichalle",
+  manifest: "/manifest.webmanifest",
   keywords: ["The Ichalle", "Women Fashion", "Timeless Wear", "Modest Fashion", "Dresses", "Blouses"],
   authors: [{ name: "The Ichalle Collection" }],
+  appleWebApp: {
+    capable: true,
+    title: "The Ichalle",
+    statusBarStyle: "default",
+  },
   openGraph: {
     title: "The Ichalle Collection | Timeless Women Wear",
     description: "Curated modern, modest, and timeless women wear crafted with luxurious fabrics and effortless silhouettes.",

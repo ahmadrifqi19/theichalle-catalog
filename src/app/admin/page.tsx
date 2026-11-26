@@ -172,8 +172,55 @@ export default function AdminDashboardPage() {
     is_featured: false,
     marketplace_url: '',
   });
+  const [soldOutVariants, setSoldOutVariants] = useState<string[]>([]);
   const [sizeVariants, setSizeVariants] = useState<Record<string, { bust: string; length: string }>>({});
   const parsedSizes = productForm.sizesInput.split(',').map((s) => s.trim()).filter(Boolean);
+  const parsedShades = productForm.shadesInput.split(',').map((shade) => shade.trim()).filter(Boolean);
+
+  const toggleSoldOutVariant = (shade: string, size: string) => {
+    const variant = `${shade}::${size}`;
+    const isVariantMarkedSoldOut = soldOutVariants.includes(variant);
+    const shadeIsMarkedSoldOut = productForm.soldOutShades.includes(shade);
+    const nextVariants = shadeIsMarkedSoldOut && !isVariantMarkedSoldOut
+      ? [
+          ...soldOutVariants.filter((item) => !item.startsWith(`${shade}::`)),
+          ...parsedSizes.filter((item) => item !== size).map((item) => `${shade}::${item}`),
+        ]
+      : isVariantMarkedSoldOut
+        ? soldOutVariants.filter((item) => item !== variant)
+        : [...soldOutVariants, variant];
+
+    setSoldOutVariants(nextVariants);
+    setProductForm((previous) => ({
+      ...previous,
+      soldOutShades: parsedSizes.length > 0 &&
+        parsedSizes.every((item) => nextVariants.includes(`${shade}::${item}`))
+        ? previous.soldOutShades.includes(shade)
+          ? previous.soldOutShades
+          : [...previous.soldOutShades, shade]
+        : previous.soldOutShades.filter((item) => item !== shade),
+    }));
+  };
+
+  const toggleSoldOutShade = (shade: string) => {
+    const isShadeSoldOut = productForm.soldOutShades.includes(shade);
+    if (
+      isShadeSoldOut &&
+      parsedSizes.length > 0 &&
+      parsedSizes.every((size) => soldOutVariants.includes(`${shade}::${size}`))
+    ) {
+      setSoldOutVariants((previous) =>
+        previous.filter((variant) => !variant.startsWith(`${shade}::`))
+      );
+    }
+
+    setProductForm((previous) => ({
+      ...previous,
+      soldOutShades: isShadeSoldOut
+        ? previous.soldOutShades.filter((item) => item !== shade)
+        : [...previous.soldOutShades, shade],
+    }));
+  };
 
   const updateSizeVariant = (size: string, field: 'bust' | 'length', value: string) => {
     setSizeVariants((previous) => ({
@@ -347,6 +394,7 @@ export default function AdminDashboardPage() {
       is_featured: false,
       marketplace_url: '',
     });
+    setSoldOutVariants([]);
     setSizeVariants({});
     setCompressionInfo(null);
     setCustomImageUrlInput('');
@@ -373,6 +421,7 @@ export default function AdminDashboardPage() {
       is_featured: product.is_featured,
       marketplace_url: product.marketplace_url || '',
     });
+    setSoldOutVariants(product.sold_out_variants || []);
     setSizeVariants(product.size_guide?.variants || {});
     setCompressionInfo(null);
     setCustomImageUrlInput('');
@@ -520,6 +569,10 @@ export default function AdminDashboardPage() {
       shades: shadesArray,
       sold_out_shades: productForm.soldOutShades.filter((shade) => shadesArray.includes(shade)),
       sizes: sizesArray,
+      sold_out_variants: soldOutVariants.filter((variant) => {
+        const [shade, size] = variant.split('::');
+        return shadesArray.includes(shade) && sizesArray.includes(size);
+      }),
       size_guide: {
         bust: firstSizeVariant?.bust ?? productForm.bust,
         length: firstSizeVariant?.length ?? productForm.length,
@@ -1918,25 +1971,14 @@ export default function AdminDashboardPage() {
                     className="w-full px-3 py-2 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs text-[#2B2625] focus:outline-none focus:border-[#5C1A26]"
                   />
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {productForm.shadesInput
-                      .split(',')
-                      .map((shade) => shade.trim())
-                      .filter(Boolean)
-                      .map((shade, index) => {
+                    {parsedShades.map((shade, index) => {
                         const isSoldOut = productForm.soldOutShades.includes(shade);
                         return (
                           <button
                             key={`${shade}-${index}`}
                             type="button"
                             aria-pressed={isSoldOut}
-                            onClick={() =>
-                              setProductForm((prev) => ({
-                                ...prev,
-                                soldOutShades: isSoldOut
-                                  ? prev.soldOutShades.filter((item) => item !== shade)
-                                  : [...prev.soldOutShades, shade],
-                              }))
-                            }
+                              onClick={() => toggleSoldOutShade(shade)}
                             className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                               isSoldOut
                                 ? 'border-red-300 bg-red-50 text-red-700 line-through'
@@ -1968,6 +2010,53 @@ export default function AdminDashboardPage() {
                   />
                 </div>
               </div>
+              {parsedShades.length > 0 && parsedSizes.length > 0 && (
+                <div className="space-y-2 rounded border border-[#EADFCF] p-3">
+                  <span className="block text-[11px] uppercase tracking-wider font-semibold text-[#2B2625]">
+                    Shade + Size Stock
+                  </span>
+                  {parsedShades.map((shade) => {
+                    const isShadeSoldOut = productForm.soldOutShades.includes(shade);
+                    return (
+                      <div key={shade} className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          aria-pressed={isShadeSoldOut}
+                          onClick={() => toggleSoldOutShade(shade)}
+                          className={`min-w-20 rounded border px-2 py-1 text-left text-[10px] transition-colors ${
+                            isShadeSoldOut
+                              ? 'border-red-300 bg-red-50 text-red-700 line-through'
+                              : 'border-[#EADFCF] text-[#2B2625] hover:border-[#5C1A26]'
+                          }`}
+                        >
+                          {shade}{isShadeSoldOut ? ' (Habis)' : ''}
+                        </button>
+                        <div className="flex flex-wrap gap-1.5">
+                          {parsedSizes.map((size) => {
+                            const isSoldOut = isShadeSoldOut ||
+                              soldOutVariants.includes(`${shade}::${size}`);
+                            return (
+                              <button
+                                key={`${shade}::${size}`}
+                                type="button"
+                                aria-pressed={isSoldOut}
+                                onClick={() => toggleSoldOutVariant(shade, size)}
+                                className={`rounded border px-2 py-1 text-[10px] transition-colors ${
+                                  isSoldOut
+                                    ? 'border-red-300 bg-red-50 text-red-700 line-through'
+                                    : 'border-[#EADFCF] text-[#2B2625] hover:border-[#5C1A26]'
+                                }`}
+                              >
+                                {size}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Size Guide & Fabric Specs */}
               <div className="p-3 bg-[#F3ECE1]/30 border border-[#EADFCF] rounded space-y-2">

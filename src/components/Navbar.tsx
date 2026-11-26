@@ -233,12 +233,6 @@ export default function Navbar({
               <span>@theichalle</span>
               <ArrowUpRight className="w-3 h-3" />
             </a>
-            <a
-              href="/admin"
-              className="text-[11px] text-[#2B2625]/60 hover:text-[#5C1A26] uppercase tracking-wider"
-            >
-              Admin Portal
-            </a>
           </div>
         </div>
       )}

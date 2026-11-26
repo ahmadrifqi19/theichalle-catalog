@@ -27,10 +27,19 @@ export default function ProductDetailModal({
   const [selectedShade, setSelectedShade] = useState<string>(
     () => product?.shades?.find((shade) => !product.sold_out_shades?.includes(shade)) ?? ''
   );
-  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedSize, setSelectedSize] = useState<string>(() => {
+    const sizes = product?.sizes ?? [];
+    const initialShade = product?.shades?.find(
+      (shade) => !product.sold_out_shades?.includes(shade)
+    ) ?? '';
+    return sizes.find((size) =>
+      !product?.sold_out_shades?.includes(initialShade) &&
+      !product?.sold_out_variants?.includes(`${initialShade}::${size}`)
+    ) ?? sizes[0] ?? '';
+  });
   const [isZoomed, setIsZoomed] = useState(false);
 
- // Lock body scroll when modal is open
+  // Lock body scroll when modal is open
   useEffect(() => {
     if (product) {
       document.body.style.overflow = 'hidden';
@@ -48,6 +57,20 @@ export default function ProductDetailModal({
 
   const shades = product.shades ?? [];
   const soldOutShades = product.sold_out_shades ?? [];
+  const isVariantSoldOut = (shade: string, size: string) =>
+    Boolean(
+      product.sold_out_shades?.includes(shade) ||
+      product.sold_out_variants?.includes(`${shade}::${size}`)
+    );
+  const firstAvailableSizeForShade = (shade: string) =>
+    product.sizes.find((size) => !isVariantSoldOut(shade, size));
+  const handleSelectShade = (shade: string) => {
+    setSelectedShade(shade);
+    if (isVariantSoldOut(shade, selectedSize)) {
+      const firstAvailableSize = firstAvailableSizeForShade(shade);
+      if (firstAvailableSize) setSelectedSize(firstAvailableSize);
+    }
+  };
   const bust = product.size_guide?.variants?.[selectedSize]?.bust || product.size_guide?.bust;
   const length = product.size_guide?.variants?.[selectedSize]?.length || product.size_guide?.length;
   const handleSelectImageIndex = (index: number) => {
@@ -56,7 +79,7 @@ export default function ProductDetailModal({
 
     const shade = shades[nextIndex];
     if (shade && !soldOutShades.includes(shade)) {
-      setSelectedShade(shade);
+      handleSelectShade(shade);
     }
   };
 
@@ -69,9 +92,9 @@ export default function ProductDetailModal({
     isProductSoldOut ||
     soldOutShades.includes(selectedShade) ||
     Boolean(currentPhotoShade && soldOutShades.includes(currentPhotoShade));
-  const isSelectedShadeSoldOut = soldOutShades.includes(selectedShade);
-  const allShadesSoldOut = shades.length > 0 && shades.every((shade) => soldOutShades.includes(shade));
-  const isSoldOut = isProductSoldOut || isSelectedShadeSoldOut || allShadesSoldOut;
+  const isSoldOut =
+    product.status === 'Sold Out' || soldOutShades.includes(selectedShade) ||
+    isVariantSoldOut(selectedShade, selectedSize);
 
   // WhatsApp CTA Link with pre-filled message
   const waUrl = buildWhatsAppOrderUrl({
@@ -282,7 +305,7 @@ export default function ProductDetailModal({
                       aria-label={isShadeSoldOut ? `${shade} (Sold Out)` : shade}
                       title={isShadeSoldOut ? 'Sold Out' : undefined}
                       onClick={() => {
-                        setSelectedShade(shade);
+                        handleSelectShade(shade);
                         if (idx < images.length) {
                           handleSelectImageIndex(idx);
                         }
@@ -318,14 +341,21 @@ export default function ProductDetailModal({
                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {product.sizes.map((size) => {
                       const isSelected = selectedSize === size;
+                      const isSizeSoldOut = isVariantSoldOut(selectedShade, size);
                       return (
                         <button
                           key={size}
+                          type="button"
+                          disabled={isSizeSoldOut}
+                          aria-label={isSizeSoldOut ? `${size} (Sold Out)` : size}
+                          title={isSizeSoldOut ? 'Sold Out' : undefined}
                           onClick={() => setSelectedSize(size)}
-                          className={`text-[11px] sm:text-xs px-3 py-1 rounded border transition-all active:scale-95 ${
-                            isSelected
-                              ? 'bg-[#2B2625] text-[#FAF6F0] border-[#2B2625] shadow-xs font-medium'
-                              : 'bg-[#FAF6F0] text-[#2B2625] border-[#EADFCF] hover:border-[#2B2625]'
+                          className={`text-[11px] sm:text-xs px-3 py-1 rounded border transition-all ${
+                            isSizeSoldOut
+                              ? 'bg-[#F3ECE1]/60 border-dashed border-[#2B2625]/25 text-[#2B2625]/35 line-through opacity-45 cursor-not-allowed'
+                              : isSelected
+                                ? 'bg-[#2B2625] text-[#FAF6F0] border-[#2B2625] shadow-xs font-medium active:scale-95'
+                                : 'bg-[#FAF6F0] text-[#2B2625] border-[#EADFCF] hover:border-[#2B2625] active:scale-95'
                           }`}
                         >
                           {size}

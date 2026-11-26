@@ -20,6 +20,7 @@ export interface Product {
   images: string[];
   shades: string[];
   sold_out_shades?: string[];
+  sold_out_variants?: string[];
   sizes: string[];
   size_guide?: SizeGuide;
   status: ProductStatus;
