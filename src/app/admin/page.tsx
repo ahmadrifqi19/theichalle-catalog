@@ -7,6 +7,7 @@ import { Product, StoreSettings, ProductStatus } from '@/lib/types';
 import { INITIAL_PRODUCTS, DEFAULT_STORE_SETTINGS } from '@/lib/mock-data';
 import { DEFAULT_CATEGORIES } from '@/lib/categories';
 import { formatRupiah } from '@/lib/format';
+import { formatProductImage, parseProductImage } from '@/lib/product-images';
 import { compressProductImage } from '@/lib/image-compression';
 import {
   LogOut,
@@ -410,6 +411,7 @@ export default function AdminDashboardPage() {
   };
 
   const openEditProductModal = (product: Product) => {
+    const hasTaggedImages = product.images?.some((image) => parseProductImage(image).shade !== null);
     setEditingProductId(product.id);
     setProductForm({
       name: product.name,
@@ -417,7 +419,12 @@ export default function AdminDashboardPage() {
       price: product.price,
       discount_price: product.discount_price ?? null,
       description: product.description || '',
-      images: product.images || [],
+      images: (product.images || []).map((image, index) => {
+        const parsedImage = parseProductImage(image);
+        return hasTaggedImages
+          ? image
+          : formatProductImage(parsedImage.url, product.shades?.[index] ?? null);
+      }),
       shadesInput: product.shades?.join(', ') || '',
       soldOutShades: product.sold_out_shades || [],
       sizesInput: product.sizes?.join(', ') || '',
@@ -530,6 +537,17 @@ export default function AdminDashboardPage() {
     }));
   };
 
+  const handleImageShadeChange = (index: number, shade: string) => {
+    setProductForm((prev) => ({
+      ...prev,
+      images: prev.images.map((image, imageIndex) => {
+        if (imageIndex !== index) return image;
+        const { url } = parseProductImage(image);
+        return formatProductImage(url, shade || null);
+      }),
+    }));
+  };
+
   // 8. Save Product
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -563,7 +581,15 @@ export default function AdminDashboardPage() {
       price: Number(productForm.price),
       discount_price: productForm.discount_price ? Number(productForm.discount_price) : null,
       description: productForm.description,
-      images: productForm.images.length > 0 ? productForm.images : ['https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800'],
+      images: productForm.images.length > 0
+        ? productForm.images.map((image) => {
+            const parsedImage = parseProductImage(image);
+            const shade = parsedImage.shade && shadesArray.includes(parsedImage.shade)
+              ? parsedImage.shade
+              : null;
+            return formatProductImage(parsedImage.url, shade);
+          })
+        : ['https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800'],
       shades: shadesArray,
       sold_out_shades: productForm.soldOutShades.filter((shade) => shadesArray.includes(shade)),
       sizes: sizesArray,
@@ -1835,7 +1861,7 @@ export default function AdminDashboardPage() {
                       Product Photos ({productForm.images.length})
                     </span>
                     <p className="text-[10px] text-[#2B2625]/60">
-                      Auto-compressed. Match photo order (#1, #2, etc.) with shades order below.
+                      Auto-compressed. Choose a shade for each photo, or leave it as a cover/general photo.
                     </p>
                   </div>
 
@@ -1878,29 +1904,42 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Photos Thumbnail List */}
-                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-1">
                   {productForm.images.map((img, idx) => (
                     <div
                       key={idx}
-                      className="relative aspect-[3/4] bg-[#F3ECE1] rounded border border-[#EADFCF] overflow-hidden group"
+                      className="min-w-0 space-y-1.5"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={img}
-                        alt={`Photo ${idx + 1}`}
-                        className="w-full h-full object-cover object-top"
-                      />
-                      <div className="absolute top-1 left-1 bg-[#2B2625]/80 text-[#FAF6F0] text-[8px] px-1 py-0.2 rounded">
-                        #{idx + 1}
+                      <div className="relative aspect-[3/4] bg-[#F3ECE1] rounded border border-[#EADFCF] overflow-hidden group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={parseProductImage(img).url}
+                          alt={`Photo ${idx + 1}`}
+                          className="w-full h-full object-cover object-top"
+                        />
+                        <div className="absolute top-1 left-1 bg-[#2B2625]/80 text-[#FAF6F0] text-[8px] px-1 py-0.2 rounded">
+                          #{idx + 1}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImage(idx)}
+                          className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full"
+                          title="Remove photo"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(idx)}
-                        className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full"
-                        title="Remove photo"
+                      <select
+                        value={parseProductImage(img).shade ?? ''}
+                        onChange={(event) => handleImageShadeChange(idx, event.target.value)}
+                        aria-label={`Shade for photo ${idx + 1}`}
+                        className="w-full min-w-0 rounded border border-[#EADFCF] bg-[#FAF6F0] px-1.5 py-1 text-[10px] text-[#2B2625] focus:outline-none focus:border-[#5C1A26]"
                       >
-                        <X className="w-3 h-3" />
-                      </button>
+                        <option value="">Cover / General (No Shade)</option>
+                        {parsedShades.map((shade, shadeIndex) => (
+                          <option key={`${shade}-${shadeIndex}`} value={shade}>{shade}</option>
+                        ))}
+                      </select>
                     </div>
                   ))}
                   {productForm.images.length === 0 && (
@@ -2007,7 +2046,7 @@ export default function AdminDashboardPage() {
                       })}
                   </div>
                   <p className="text-[10px] text-[#5C1A26]/80 mt-1">
-                    Klik warna untuk menandai atau membatalkan status habis. Urutan foto (#1, #2, dst.) mengikuti urutan warna.
+                    Klik warna untuk menandai atau membatalkan status habis.
                   </p>
                 </div>
 

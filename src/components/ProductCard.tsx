@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Product } from '@/lib/types';
 import { formatRupiah } from '@/lib/format';
+import { parseProductImage } from '@/lib/product-images';
 import { Eye } from 'lucide-react';
 
 interface ProductCardProps {
@@ -13,8 +14,12 @@ interface ProductCardProps {
 export default function ProductCard({ product, onSelect }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
-  const primaryImage = product.images?.[0] || 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800';
-  const secondaryImage = product.images?.[1] || primaryImage;
+  const primaryImage = product.images?.[0]
+    ? parseProductImage(product.images[0]).url
+    : 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800';
+  const secondaryImage = product.images?.[1]
+    ? parseProductImage(product.images[1]).url
+    : primaryImage;
   const hasSecondaryImage = product.images && product.images.length > 1;
 
   const isSoldOut = product.status === 'Sold Out' || product.status === 'sold_out';

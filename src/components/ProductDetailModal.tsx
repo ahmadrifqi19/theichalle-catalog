@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product } from '@/lib/types';
 import { formatRupiah, buildWhatsAppOrderUrl } from '@/lib/format';
+import { parseProductImage } from '@/lib/product-images';
 import { X, ZoomIn, ExternalLink, Ruler, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ProductDetailModalProps {
@@ -16,22 +17,32 @@ export default function ProductDetailModal({
   onClose,
   whatsappNumber = '6285882116161',
 }: ProductDetailModalProps) {
+  const rawImages = product?.images?.length
+    ? product.images
+    : ['https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800'];
+  const hasTaggedImages = rawImages.some((image) => parseProductImage(image).shade !== null);
+  const imageEntries = rawImages.map((rawUrl, index) => {
+    const parsedImage = parseProductImage(rawUrl);
+    return {
+      ...parsedImage,
+      shade: parsedImage.shade ?? (
+        hasTaggedImages ? null : product?.shades?.[index] ?? null
+      ),
+    };
+  });
+  const shades = product?.shades ?? [];
+  const images = imageEntries.map((image) => image.url);
   const [selectedImageIndex, setSelectedImageIndex] = useState(() => {
-    const firstAvailableShadeIndex = product?.shades?.findIndex(
-      (shade) => !product.sold_out_shades?.includes(shade)
-    ) ?? -1;
-    return firstAvailableShadeIndex >= 0 && firstAvailableShadeIndex < (product?.images.length ?? 0)
-      ? firstAvailableShadeIndex
-      : 0;
+    const firstAvailableShade = shades.find((shade) => !product?.sold_out_shades?.includes(shade));
+    const firstShadeImageIndex = imageEntries.findIndex((image) => image.shade === firstAvailableShade);
+    return firstShadeImageIndex >= 0 ? firstShadeImageIndex : 0;
   });
   const [selectedShade, setSelectedShade] = useState<string>(
-    () => product?.shades?.find((shade) => !product.sold_out_shades?.includes(shade)) ?? ''
+    () => shades.find((shade) => !product?.sold_out_shades?.includes(shade)) ?? ''
   );
   const [selectedSize, setSelectedSize] = useState<string>(() => {
     const sizes = product?.sizes ?? [];
-    const initialShade = product?.shades?.find(
-      (shade) => !product.sold_out_shades?.includes(shade)
-    ) ?? '';
+    const initialShade = shades.find((shade) => !product?.sold_out_shades?.includes(shade)) ?? '';
     return sizes.find((size) =>
       !product?.sold_out_shades?.includes(initialShade) &&
       !product?.sold_out_variants?.includes(`${initialShade}::${size}`)
@@ -51,11 +62,6 @@ export default function ProductDetailModal({
 
   if (!product) return null;
 
-  const images = product.images && product.images.length > 0
-    ? product.images
-    : ['https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800'];
-
-  const shades = product.shades ?? [];
   const soldOutShades = product.sold_out_shades ?? [];
   const isVariantSoldOut = (shade: string, size: string) =>
     Boolean(
@@ -66,6 +72,8 @@ export default function ProductDetailModal({
     product.sizes.find((size) => !isVariantSoldOut(shade, size));
   const handleSelectShade = (shade: string) => {
     setSelectedShade(shade);
+    const shadeImageIndex = imageEntries.findIndex((image) => image.shade === shade);
+    if (shadeImageIndex >= 0) setSelectedImageIndex(shadeImageIndex);
     if (isVariantSoldOut(shade, selectedSize)) {
       const firstAvailableSize = firstAvailableSizeForShade(shade);
       if (firstAvailableSize) setSelectedSize(firstAvailableSize);
@@ -77,8 +85,8 @@ export default function ProductDetailModal({
     const nextIndex = ((index % images.length) + images.length) % images.length;
     setSelectedImageIndex(nextIndex);
 
-    const shade = shades[nextIndex];
-    if (shade && !soldOutShades.includes(shade)) {
+    const shade = imageEntries[nextIndex]?.shade;
+    if (shade && shades.includes(shade)) {
       handleSelectShade(shade);
     }
   };
@@ -86,12 +94,14 @@ export default function ProductDetailModal({
   const currentImage = images[selectedImageIndex] || images[0];
   const hasDiscount = typeof product.discount_price === 'number' && product.discount_price < product.price;
   const activePrice = hasDiscount ? product.discount_price! : product.price;
-  const isProductSoldOut = product.status === 'Sold Out' || product.status === 'sold_out';
-  const currentPhotoShade = shades[selectedImageIndex];
-  const isCurrentPhotoSoldOut =
-    isProductSoldOut ||
-    soldOutShades.includes(selectedShade) ||
-    Boolean(currentPhotoShade && soldOutShades.includes(currentPhotoShade));
+  const isShadeSoldOut = (shade: string) =>
+    soldOutShades.includes(shade) ||
+    (product.sizes.length > 0 &&
+      product.sizes.every((size) => product.sold_out_variants?.includes(`${shade}::${size}`)));
+  const currentPhotoShade = imageEntries[selectedImageIndex]?.shade;
+  const isCurrentPhotoSoldOut = Boolean(
+    currentPhotoShade && shades.includes(currentPhotoShade) && isShadeSoldOut(currentPhotoShade)
+  );
   const isSoldOut =
     product.status === 'Sold Out' || soldOutShades.includes(selectedShade) ||
     isVariantSoldOut(selectedShade, selectedSize);
@@ -233,7 +243,11 @@ export default function ProductDetailModal({
                         alt={`Thumbnail ${idx + 1}`}
                         className="w-full h-full object-cover object-top"
                       />
-                      {(isProductSoldOut || Boolean(shades[idx] && soldOutShades.includes(shades[idx]))) && (
+                      {Boolean(
+                        imageEntries[idx]?.shade &&
+                        shades.includes(imageEntries[idx].shade) &&
+                        isShadeSoldOut(imageEntries[idx].shade)
+                      ) && (
                         <span className="pointer-events-none absolute left-1 top-1 rounded-sm bg-[#5C1A26]/95 px-1 py-0.5 text-[7px] font-semibold tracking-wider text-[#FAF6F0] sm:text-[8px]">
                           SOLD OUT
                         </span>
@@ -296,7 +310,7 @@ export default function ProductDetailModal({
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                  {shades.map((shade, idx) => {
+                  {shades.map((shade) => {
                     const isShadeSoldOut = soldOutShades.includes(shade);
                     return (
                     <button
@@ -306,9 +320,6 @@ export default function ProductDetailModal({
                       title={isShadeSoldOut ? 'Sold Out' : undefined}
                       onClick={() => {
                         handleSelectShade(shade);
-                        if (idx < images.length) {
-                          handleSelectImageIndex(idx);
-                        }
                       }}
                       className={`px-3.5 py-1.5 text-xs border transition-all ${
                         selectedShade === shade
