@@ -215,13 +215,13 @@ export default function ProductDetailModal({
 
               {/* Thumbnail Strip */}
               {images.length > 1 && (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="flex gap-2 overflow-x-auto pb-1 scroll-smooth">
                   {images.map((imgUrl, idx) => (
                   <button
                       key={idx}
                       type="button"
                       onClick={() => handleSelectImageIndex(idx)}
-                      className={`relative aspect-[3/4] rounded-sm overflow-hidden border-2 transition-all ${
+                      className={`relative aspect-[3/4] w-16 sm:w-20 shrink-0 rounded-sm overflow-hidden border-2 transition-all ${
                         selectedImageIndex === idx
                           ? 'border-[#5C1A26] ring-1 ring-[#5C1A26]'
                           : 'border-transparent opacity-70 hover:opacity-100'

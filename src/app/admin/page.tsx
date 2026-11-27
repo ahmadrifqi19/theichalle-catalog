@@ -42,8 +42,8 @@ function ManageCategoriesPanel({
 }: ManageCategoriesPanelProps) {
   const [newCategory, setNewCategory] = useState('');
 
-  const handleAdd = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleAdd = async () => {
+    if (isSaving || !newCategory.trim()) return;
     if (await onAdd(newCategory)) setNewCategory('');
   };
 
@@ -60,22 +60,30 @@ function ManageCategoriesPanel({
           Kategori ini digunakan sebagai filter katalog dan pilihan produk.
         </p>
       </div>
-      <form onSubmit={handleAdd} className="flex gap-2">
+      <div className="flex gap-2">
         <input
           value={newCategory}
           onChange={(event) => setNewCategory(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.stopPropagation();
+              void handleAdd();
+            }
+          }}
           placeholder="Nama kategori baru"
           aria-label="Nama kategori baru"
           className="min-w-0 flex-1 px-3 py-2 bg-white border border-[#EADFCF] rounded text-xs text-[#2B2625] focus:outline-none focus:border-[#5C1A26]"
         />
         <button
-          type="submit"
+          type="button"
+          onClick={() => void handleAdd()}
           disabled={isSaving || !newCategory.trim()}
           className="px-3 py-2 bg-[#5C1A26] text-[#FAF6F0] rounded text-xs font-medium disabled:opacity-50"
         >
           + Add
         </button>
-      </form>
+      </div>
       <div className="flex flex-wrap gap-2">
         {categories.length > 0 ? categories.map((category, index) => (
           <span
@@ -453,56 +461,50 @@ export default function AdminDashboardPage() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    if (productForm.images.length >= 4) {
-      alert('Maximum 4 images per product.');
-      return;
-    }
-
     setIsUploadingImage(true);
     setCompressionInfo(null);
 
-    const file = files[0];
-
     try {
-      const { file: compressedFile, originalSizeKB, compressedSizeKB, reductionPercentage } =
-        await compressProductImage(file);
+      for (const file of Array.from(files)) {
+        const { file: compressedFile, originalSizeKB, compressedSizeKB, reductionPercentage } =
+          await compressProductImage(file);
 
-      setCompressionInfo(
-        `Optimized: ${originalSizeKB} KB ➔ ${compressedSizeKB} KB (-${reductionPercentage}%)`
-      );
+        setCompressionInfo(
+          `Optimized: ${originalSizeKB} KB ➔ ${compressedSizeKB} KB (-${reductionPercentage}%)`
+        );
 
-      if (isSupabaseConfigured() && !isDemoMode) {
-        const supabase = createClient();
-        const fileExt = compressedFile.name.split('.').pop() || 'webp';
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-        const filePath = `products/${fileName}`;
+        let imageUrl: string;
+        if (isSupabaseConfigured() && !isDemoMode) {
+          const supabase = createClient();
+          const fileExt = compressedFile.name.split('.').pop() || 'webp';
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+          const filePath = `products/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('catalog-images')
-          .upload(filePath, compressedFile, {
-            cacheControl: '3600',
-            upsert: false,
-          });
+          const { error: uploadError } = await supabase.storage
+            .from('catalog-images')
+            .upload(filePath, compressedFile, {
+              cacheControl: '3600',
+              upsert: false,
+            });
 
-        if (uploadError) throw uploadError;
+          if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('catalog-images')
-          .getPublicUrl(filePath);
+          const { data: { publicUrl } } = supabase.storage
+            .from('catalog-images')
+            .getPublicUrl(filePath);
+          imageUrl = publicUrl;
+        } else {
+          imageUrl = URL.createObjectURL(compressedFile);
+        }
 
         setProductForm((prev) => ({
           ...prev,
-          images: [...prev.images, publicUrl],
+          images: [...prev.images, imageUrl],
         }));
-        showToast('Image compressed & uploaded to storage!');
-      } else {
-        const previewUrl = URL.createObjectURL(compressedFile);
-        setProductForm((prev) => ({
-          ...prev,
-          images: [...prev.images, previewUrl],
-        }));
-        showToast('Image compressed & added (Preview Mode)');
       }
+      showToast(isDemoMode || !isSupabaseConfigured()
+        ? 'Images compressed & added (Preview Mode)'
+        : 'Images compressed & uploaded to storage!');
     } catch (err: unknown) {
       console.error('Image compression/upload error:', err);
       showToast(getErrorMessage(err, 'Image upload failed'), 'error');
@@ -514,10 +516,6 @@ export default function AdminDashboardPage() {
 
   const handleAddDirectImageUrl = () => {
     if (!customImageUrlInput.trim()) return;
-    if (productForm.images.length >= 4) {
-      alert('Maximum 4 images per product.');
-      return;
-    }
     setProductForm((prev) => ({
       ...prev,
       images: [...prev.images, customImageUrlInput.trim()],
@@ -1829,31 +1827,30 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Multi-Image Upload (Max 4 Photos) */}
+              {/* Multi-Image Upload */}
               <div className="p-3.5 bg-[#F3ECE1]/50 border border-[#EADFCF] rounded-xs space-y-2.5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <span className="text-xs uppercase tracking-wider font-semibold text-[#2B2625]">
-                      Product Photos ({productForm.images.length}/4)
+                      Product Photos ({productForm.images.length})
                     </span>
                     <p className="text-[10px] text-[#2B2625]/60">
                       Auto-compressed. Match photo order (#1, #2, etc.) with shades order below.
                     </p>
                   </div>
 
-                  {productForm.images.length < 4 && (
-                    <label className="cursor-pointer bg-[#5C1A26] hover:bg-[#46121C] text-[#FAF6F0] px-3 py-1.5 rounded text-xs font-medium flex items-center justify-center gap-1.5 transition-colors self-start sm:self-auto">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{isUploadingImage ? 'Compressing...' : 'Upload Image'}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        disabled={isUploadingImage}
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
+                  <label className="cursor-pointer bg-[#5C1A26] hover:bg-[#46121C] text-[#FAF6F0] px-3 py-1.5 rounded text-xs font-medium flex items-center justify-center gap-1.5 transition-colors self-start sm:self-auto">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{isUploadingImage ? 'Compressing...' : 'Upload Image'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={isUploadingImage}
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
 
                 {compressionInfo && (
@@ -1863,27 +1860,25 @@ export default function AdminDashboardPage() {
                 )}
 
                 {/* Direct URL input option */}
-                {productForm.images.length < 4 && (
-                  <div className="flex gap-1.5">
-                    <input
-                      type="text"
-                      value={customImageUrlInput}
-                      onChange={(e) => setCustomImageUrlInput(e.target.value)}
-                      placeholder="Paste image URL (https://...)"
-                      className="flex-1 px-3 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs text-[#2B2625] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddDirectImageUrl}
-                      className="px-3 py-1.5 bg-[#FAF6F0] hover:bg-[#F3ECE1] border border-[#EADFCF] rounded text-xs font-medium text-[#2B2625] shrink-0"
-                    >
-                      Add URL
-                    </button>
-                  </div>
-                )}
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={customImageUrlInput}
+                    onChange={(e) => setCustomImageUrlInput(e.target.value)}
+                    placeholder="Paste image URL (https://...)"
+                    className="flex-1 px-3 py-1.5 bg-[#FAF6F0] border border-[#EADFCF] rounded text-xs text-[#2B2625] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddDirectImageUrl}
+                    className="px-3 py-1.5 bg-[#FAF6F0] hover:bg-[#F3ECE1] border border-[#EADFCF] rounded text-xs font-medium text-[#2B2625] shrink-0"
+                  >
+                    Add URL
+                  </button>
+                </div>
 
                 {/* Photos Thumbnail List */}
-                <div className="grid grid-cols-4 gap-2 pt-1">
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 pt-1">
                   {productForm.images.map((img, idx) => (
                     <div
                       key={idx}
@@ -1909,7 +1904,7 @@ export default function AdminDashboardPage() {
                     </div>
                   ))}
                   {productForm.images.length === 0 && (
-                    <div className="col-span-4 py-5 text-center border border-dashed border-[#EADFCF] rounded text-xs text-[#2B2625]/45">
+                    <div className="col-span-full py-5 text-center border border-dashed border-[#EADFCF] rounded text-xs text-[#2B2625]/45">
                       No photos attached.
                     </div>
                   )}
@@ -1930,8 +1925,29 @@ export default function AdminDashboardPage() {
                         <ManageCategoriesPanel
                           categories={settings.categories ?? DEFAULT_CATEGORIES}
                           isSaving={isSavingCategories}
-                          onAdd={handleAddCategory}
-                          onRemove={handleRemoveCategory}
+                          onAdd={async (category) => {
+                            const added = await handleAddCategory(category);
+                            if (added) {
+                              setProductForm((previous) => ({
+                                ...previous,
+                                category: category.trim(),
+                              }));
+                            }
+                            return added;
+                          }}
+                          onRemove={async (category) => {
+                            const nextCategories = (settings.categories ?? DEFAULT_CATEGORIES)
+                              .filter((existing) => existing.toLowerCase() !== category.toLowerCase());
+                            const removed = await handleRemoveCategory(category);
+                            if (removed) {
+                              setProductForm((previous) => (
+                                previous.category.toLowerCase() === category.toLowerCase()
+                                  ? { ...previous, category: nextCategories[0] ?? '' }
+                                  : previous
+                              ));
+                            }
+                            return removed;
+                          }}
                         />
                       </div>
                     </div>
